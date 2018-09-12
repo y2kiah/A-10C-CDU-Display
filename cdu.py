@@ -28,9 +28,12 @@ dim_green = 2
 active_color = brt_green
 
 DEVICE = 0x20 # Device address (A0-A2)
-IODIRA = 0x00 # Pin direction register
-OLATA  = 0x14 # Register for outputs
-GPIOA  = 0x12 # Register for inputs
+IODIRA = 0x00 # Pin direction register port A
+IODIRB = 0x01 # Pin direction register port B
+OLATA  = 0x14 # Register for outputs port A
+OLATB  = 0x15 # Register for outputs port B
+GPIOA  = 0x12 # Register for inputs port A
+GPIOB  = 0x13 # Register for inputs port B
 
 key_states = [0 for r in range(67)]
 key_changes = []
