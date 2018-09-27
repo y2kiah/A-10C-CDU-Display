@@ -11,6 +11,8 @@ import time
 mqtt_host = "192.168.0.174"
 mqtt_port = 1883
 
+pwm_pin = 22
+
 max_rows = 10
 max_cols = 24
 start_y = 0
@@ -75,6 +77,7 @@ def on_connect(client, userdata, flags, rc):
 	# example: dcs-bios/output/cdu_display/cdu_line0
 	client.subscribe("dcs-bios/output/cdu_display/+")
 	client.subscribe("dcs-bios/output/cdu/cdu_brt")
+	client.subscribe("dcs-bios/output/lcp/lcp_aux_inst")
 
 
 def on_disconnect(client, userdata, rc):
@@ -124,6 +127,10 @@ def on_message(client, userdata, msg):
                 elif int(msg.payload) == 2:
                         active_color = brt_green
                         redraw_lines(win)
+
+	elif msg.topic.find("lcp_aux_inst") != -1:
+		aux_light = int(msg.payload) / 65535
+		client.publish("pi-blaster-mqtt/text", "{0}={1:.2f}".format(pwm_pin, aux_light))
 
 	win.noutrefresh()
 	curses.doupdate()
@@ -217,7 +224,7 @@ def main(stdscr):
 
 		key_changes.clear()
 
-		if True:
+		if False:
 			win.clear() #temp
 			for k in range(67):
 				r = k // 8
