@@ -13,7 +13,7 @@ mqtt_host = "192.168.0.174"
 mqtt_port = 1883
 
 # these are BCM numbers
-pwm_gpio_bcm = 25  # corresponds to pin #22
+pwm_gpio_bcm = 22  # corresponds to pin #15
 row9_gpio_bcm = 15 # corresponds to pin #10
 
 max_rows = 10
@@ -80,7 +80,7 @@ def on_connect(client, userdata, flags, rc):
 	# example: dcs-bios/output/cdu_display/cdu_line0
 	client.subscribe("dcs-bios/output/cdu_display/+")
 	client.subscribe("dcs-bios/output/cdu/cdu_brt")
-	client.subscribe("dcs-bios/output/lcp/lcp_aux_inst")
+	client.subscribe("dcs-bios/output/light_system_control_panel/lcp_aux_inst")
 
 
 def on_disconnect(client, userdata, rc):
