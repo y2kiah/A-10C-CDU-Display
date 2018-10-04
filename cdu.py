@@ -7,11 +7,14 @@ import paho.mqtt.client as mqtt
 from curses import wrapper
 import smbus
 import time
+import RPi.GPIO as GPIO
 
 mqtt_host = "192.168.0.174"
 mqtt_port = 1883
 
-pwm_pin = 22
+# these are BCM numbers
+pwm_gpio_bcm = 25  # corresponds to pin #22
+row9_gpio_bcm = 15 # corresponds to pin #10
 
 max_rows = 10
 max_cols = 24
@@ -37,20 +40,20 @@ OLATB  = 0x15 # Register for outputs port B
 GPIOA  = 0x12 # Register for inputs port A
 GPIOB  = 0x13 # Register for inputs port B
 
-key_states = [0 for r in range(67)]
+key_states = [0 for r in range(72)]
 key_changes = []
 
 # keys laid out exactly as they are wired into rows and columns
 key_matrix = [
-	"cdu_lsk_3l",      "cdu_lsk_5l","cdu_lsk_7l","cdu_lsk_9l",    "cdu_lsk_9r","cdu_lsk_7r","cdu_lsk_5r",   "cdu_lsk_3r",
-	"cdu_sys",         "cdu_nav",   "cdu_wp",    "cdu_oset",      "cdu_fpm",   "cdu_prev",  ["cdu_brt",0,1],["cdu_brt",2,1],
-	"cdu_1",           "cdu_2",     "cdu_3",     "cdu_a",         "cdu_b",     "cdu_c",     "cdu_d",        "cdu_e",
-	"cdu_4",           "cdu_5",     "cdu_6",     "cdu_g",         "cdu_h",     "cdu_i",     "cdu_j",        "cdu_k",
-	"cdu_7",           "cdu_8",     "cdu_9",     "cdu_m",         "cdu_n",     "cdu_o",     "cdu_p",        "cdu_q",
-	"cdu_point",       "cdu_0",     "cdu_slash", "cdu_s",         "cdu_t",     "cdu_u",     "cdu_v",        "cdu_w",
-	["cdu_pg",2,1],    "cdu_na1",   "cdu_na2",   "cdu_bck",       "cdu_spc",   "cdu_y",     "cdu_z",        ["cdu_data",2,1],
-	["cdu_scroll",2,1],"cdu_clr",   "cdu_fa",    ["cdu_data",0,1],"cdu_x",     "cdu_r",     "cdu_l",        "cdu_f",
-	["cdu_pg",0,1],    "cdu_mk",    ["cdu_scroll",0,1]
+	None,        None,        None,           None,            ["cdu_pg",0,1],"cdu_mk",    ["cdu_scroll",0,1],None,
+	"cdu_spc",   "cdu_y",     "cdu_z",        ["cdu_data",2,1],["cdu_pg",2,1],"cdu_na1",   "cdu_na2",         "cdu_bck",
+	"cdu_t",     "cdu_u",     "cdu_v",        "cdu_w",         "cdu_point",   "cdu_0",     "cdu_slash",       "cdu_s",
+	"cdu_lsk_3r","cdu_lsk_5r","cdu_lsk_7r",   "cdu_lsk_9r",    "cdu_lsk_9l",  "cdu_lsk_7l","cdu_lsk_5l",      "cdu_lsk_3l",
+	"cdu_fpm",   "cdu_prev",  ["cdu_brt",0,1],["cdu_brt",2,1], "cdu_sys",     "cdu_nav",   "cdu_wp",          "cdu_oset",
+	"cdu_b",     "cdu_c",     "cdu_d",        "cdu_e",         "cdu_1",       "cdu_2",     "cdu_3",           "cdu_a",
+	"cdu_h",     "cdu_i",     "cdu_j",        "cdu_k",         "cdu_4",       "cdu_5",     "cdu_6",           "cdu_g",
+	"cdu_n",     "cdu_o",     "cdu_p",        "cdu_q",         "cdu_7",       "cdu_8",     "cdu_9",           "cdu_m",
+	"cdu_r",     "cdu_l",     "cdu_f",        ["cdu_data",0,1],"cdu_fa",      "cdu_clr",   ["cdu_scroll",2,1],"cdu_x"
 ]
 
 
@@ -130,7 +133,7 @@ def on_message(client, userdata, msg):
 
 	elif msg.topic.find("lcp_aux_inst") != -1:
 		aux_light = int(msg.payload) / 65535
-		client.publish("pi-blaster-mqtt/text", "{0}={1:.2f}".format(pwm_pin, aux_light))
+		client.publish("pi-blaster-mqtt/text", "{0}={1:.2f}".format(pwm_gpio_bcm, aux_light))
 
 	win.noutrefresh()
 	curses.doupdate()
@@ -149,13 +152,16 @@ def init_MCP23017():
 	bus = smbus.SMBus(1) # Rev 2 Pi uses i2c bus 1
 
 	# Set all GPA pins as outputs by setting all bits of IODIRA register to 0
-	#bus.write_byte_data(DEVICE, IODIRA, 0x00)
-	bus.write_byte_data(DEVICE, IODIRA, 0xc0) # 11000000  A0-A5 output, A6-A7 input
-
-	# Set output all 7 output bits to 0
+	bus.write_byte_data(DEVICE, IODIRA, 0x00)
+	# Set all 8 output bits to 0
 	bus.write_byte_data(DEVICE, OLATA, 0)
 
 	return bus
+
+
+def init_GPIO():
+	GPIO.setmode(GPIO.BCM)
+	GPIO.setup(row9_gpio_bcm, GPIO.IN, pull_up_down = GPIO.PUD_DOWN)
 
 
 def main(stdscr):
@@ -190,28 +196,37 @@ def main(stdscr):
 
 	bus = init_MCP23017()
 
+	init_GPIO()
+
 	# dispatches callbacks and handles reconnecting.
 	client.loop_start()
 
 	# use CTRL-C to quit
 	running = True
 	while running:
-		for col in range(6): #8):
+		for col in range(8):
 			out_mask = 1 << col
+			# columns are on port A
 			bus.write_byte_data(DEVICE, OLATA, out_mask)
 			time.sleep(0.001)
-			in_byte = bus.read_byte_data(DEVICE, GPIOA)
+			# rows are on port B
+			in_byte = bus.read_byte_data(DEVICE, GPIOB)
 
-			for row in range(6,8): #8):
-				key_down = (in_byte >> row) & 0x01
+			for row in range(9):
+				key_down = 0
+				if (row < 8):
+					key_down = (in_byte >> row) & 0x01
+				else: # row 9
+					key_down = GPIO.input(row9_gpio_bcm)
+
 				k = row * 8 + col
 				if key_states[k] != key_down:
 					key = key_matrix[k]
 					key_val = key_down
 					if isinstance(key, str):
 						key_str = key
-					# if not a string, must be an array [name, down val, up val]
-					else:
+					# if not a string or None, it's an array [name, down val, up val]
+					elif key is not None:
 						key_str = key[0]
 						key_val = key[1] if key_val == 1 else key[2]
 
@@ -224,9 +239,10 @@ def main(stdscr):
 
 		key_changes.clear()
 
+		# this section prints the key matrix
 		if False:
 			win.clear() #temp
-			for k in range(67):
+			for k in range(72):
 				r = k // 8
 				c = k % 8
 				win.addnstr(r, c, str(key_states[k]), max_cols)
@@ -235,6 +251,6 @@ def main(stdscr):
 
 	client.disconnect()
 	client.loop_stop()
-
+	GPIO.cleanup()
 
 wrapper(main)
