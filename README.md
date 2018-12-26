@@ -65,30 +65,30 @@ CDU buttons and back lighting are also implemented in the same `cdu.py` script a
 
 	in `Mods\aircraft\A-10C\Cockpit\Scripts\CDU\indicator\CDU_init.lua` add to top
 
-		```Lua
-		dofile(LockOn_Options.common_script_path.."devices_defs.lua")
-		dofile(LockOn_Options.common_script_path.."ViewportHandling.lua")	--added for Instrument Export Mod
+	```Lua
+	dofile(LockOn_Options.common_script_path.."devices_defs.lua")
+	dofile(LockOn_Options.common_script_path.."ViewportHandling.lua")	--added for Instrument Export Mod
 
-		indicator_type = indicator_types.COMMON
+	indicator_type = indicator_types.COMMON
 
-		--added for Instrument Export Mod
-		purposes                  = {render_purpose.GENERAL}
-		update_screenspace_diplacement(1,0,0)    
-		try_find_assigned_viewport("ED_A10C_CDU","CDU_SCREEN")
-		--end Instrument Export Mod adds
-		```
+	--added for Instrument Export Mod
+	purposes                  = {render_purpose.GENERAL}
+	update_screenspace_diplacement(1,0,0)    
+	try_find_assigned_viewport("ED_A10C_CDU","CDU_SCREEN")
+	--end Instrument Export Mod adds
+	```
 		
 	add in `Config\MonitorSetup\[custom monitor].lua`
 	
-		```Lua
-		ED_A10C_CDU =
-		{
-			x = -1;
-			y = 0;
-			width = 1;
-			height = 1;
-		}
-		```
+	```Lua
+	ED_A10C_CDU =
+	{
+		x = -1;
+		y = 0;
+		width = 1;
+		height = 1;
+	}
+	```
 
 12) (optional, not CDU specific) remove MFCD from HUD-only view
 
