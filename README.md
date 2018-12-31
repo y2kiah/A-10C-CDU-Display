@@ -29,7 +29,7 @@ CDU buttons and back lighting are also implemented in the same `cdu.py` script a
 	sudo apt-get install python-rpi.gpio python3-rpi.gpio
     ```
 
-6) add to `.profile	`
+6) add to `.profile`
 	```Shell
 	# start screen session running cdu program  when not an ssh session
 	if [ ! -n "$SSH_CLIENT" ] && [ ! -n "$SSH_TTY" ]; then
@@ -49,19 +49,27 @@ CDU buttons and back lighting are also implemented in the same `cdu.py` script a
 	- (optional) edit mqtt-client.c, set localhost to the IP of your mqtt server
 	- follow install instructions on https://github.com/gherlein/pi-blaster-mqtt
 	- before executing `sudo make install`, create the following environment file
-	- create environment file for pi-blaster service, configure control of only pin 25
-		`sudo su -c 'echo "DAEMON_OPTS=\"--gpio=25\"" > /etc/default/pi-blaster-mqtt'`
+	- create environment file for pi-blaster service, configure control of only pin 22
+		`sudo su -c 'echo "DAEMON_OPTS=\"--gpio=22\"" > /etc/default/pi-blaster-mqtt'`
 
-9) install MQTT and mosquitto (use an online tutorial)
+9) allow pi to shut down without password (enables the shutdown menu option)
+	open the sudoers file with `sudo vim /etc/sudoers`, add the following to the end
+	```Shell
+	# allow pi user to shut down with no password
+	nobody ALL = NOPASSWD: /sbin/shutdown*
+	```
+	use `:x!` to save
+
+10) install MQTT and mosquitto (use an online tutorial)
 	- can be run on same or a separate Pi
 	- only one MQTT server needed for whole cockpit
 
-10) install NodeRED and deploy DCS-BIOS-Node project
+11) install NodeRED and deploy DCS-BIOS-Node project
 	- available in a separate project
 	- recommend running on a separate Raspberry Pi 3 B+
 	- only one NodeRED instance needed for whole cockpit
 
-11) (optional) enable export of CDU in HUD-only view
+12) (optional) enable export of CDU in HUD-only view
 
 	in `Mods\aircraft\A-10C\Cockpit\Scripts\CDU\indicator\CDU_init.lua` add to top
 
@@ -90,7 +98,7 @@ CDU buttons and back lighting are also implemented in the same `cdu.py` script a
 	}
 	```
 
-12) (optional, not CDU specific) remove MFCD from HUD-only view
+13) (optional, not CDU specific) remove MFCD from HUD-only view
 
 	in `Mods\aircraft\A-10C\Cockpit\Scripts\MFCD\indicator\MFCD_init.lua` remove from "purposes" arrays
 	
