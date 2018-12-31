@@ -8,6 +8,8 @@ from curses import wrapper
 import smbus
 import time
 import RPi.GPIO as GPIO
+import os
+
 
 mqtt_host = "192.168.0.174"
 mqtt_port = 1883
@@ -21,17 +23,36 @@ max_cols = 24
 start_y = 0
 start_x = 4
 
-Disconnected = 0
-Connected = 1
-Sim = 2
+# mode settings
+Mode_Disconnected = 0
+Mode_Connected = 1
 
-mode = Disconnected
+# page settings
+Page_Connecting = 0
+Page_Waiting = 1
+Page_Menu = 2
+Page_Sim = 3
+Page_Matrix = 4
+
+# menu items
+Menu_Sim = 0
+Menu_Matrix = 1
+Menu_Shutdown = 2
+
+# color brightness
+Brt_Green = 1
+Dim_Green = 2
+
+mode = Mode_Disconnected
+page = Page_Menu
+last_page = None
+menu_sel = Menu_Sim
+na1_hold_time = None
+active_color = Brt_Green
+
 lines = [(" "*max_cols) for r in range(max_rows)]
 
-brt_green = 1
-dim_green = 2
-active_color = brt_green
-
+# MCP23017 device addresses
 DEVICE = 0x20 # Device address (A0-A2)
 IODIRA = 0x00 # Pin direction register port A
 IODIRB = 0x01 # Pin direction register port B
@@ -63,15 +84,11 @@ def eprint(*args, **kwargs):
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
-	global mode
-	win = userdata['win']
-	win.clear()
-	win.addnstr(4, 0, ("Connected to MQTT (" + str(rc) + ")").center(max_cols,' '), max_cols)
-	win.addnstr(5, 0, "Waiting for telemetry...".center(max_cols,' '), max_cols)
-	win.noutrefresh()
-	curses.doupdate()
+	global mode, page
 
-	mode = Connected
+	mode = Mode_Connected
+	if page == Page_Sim:
+		set_page(Page_Waiting)
 
 	# Subscribing in on_connect() means that if we lose the connection and
 	# reconnect then subscriptions will be renewed.
@@ -84,24 +101,19 @@ def on_connect(client, userdata, flags, rc):
 
 
 def on_disconnect(client, userdata, rc):
-	global mode
-	mode = Disconnected
-	win = userdata['win']
-	win.addnstr(4, 0, "Connecting to MQTT at".center(max_cols,' '), max_cols)
-	win.addnstr(5, 0, (mqtt_host + ":" + str(mqtt_port)).center(max_cols,' '), max_cols)
-	win.refresh()
+	global mode, page
+	mode = Mode_Disconnected
+	if page == Page_Sim:
+		set_page(Page_Connecting)
 
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-	global mode
-	global lines
-	global active_color
+	global page, lines, active_color
 	win = userdata['win']
 
-	if mode == Connected:
-		mode = Sim
-		win.clear()
+	if page == Page_Waiting:
+		set_page(Page_Sim)
 
 	if msg.topic.find("cdu_line") != -1:
 		row = int(msg.topic[-1])
@@ -125,10 +137,10 @@ def on_message(client, userdata, msg):
 
 	elif msg.topic.find("cdu_brt") != -1:
                 if int(msg.payload) == 0:
-                        active_color = dim_green
+                        active_color = Dim_Green
                         redraw_lines(win)
                 elif int(msg.payload) == 2:
-                        active_color = brt_green
+                        active_color = Brt_Green
                         redraw_lines(win)
 
 	elif msg.topic.find("lcp_aux_inst") != -1:
@@ -145,6 +157,113 @@ def redraw_lines(win):
 			win.addnstr(row, 0, lines[row], max_cols, curses.color_pair(active_color))
 		except:
 			pass
+
+
+def set_page(new_page):
+	global page, last_page
+	last_page = page
+	page = new_page
+
+	if new_page == Page_Menu:
+		menu_sel = Menu_Sim
+
+
+def draw_page(win):
+	global page, last_page
+
+	if page == Page_Connecting and last_page != Page_Connecting:
+		win.addnstr(4, 0, "Connecting to MQTT at".center(max_cols,' '), max_cols)
+		win.addnstr(5, 0, (mqtt_host + ":" + str(mqtt_port)).center(max_cols,' '), max_cols)
+		win.noutrefresh()
+		curses.doupdate()
+		last_page =  Page_Connecting
+
+	elif page == Page_Waiting and last_page != Page_Waiting:
+		win.clear()
+		win.addnstr(4, 0, "Connected to MQTT at".center(max_cols,' '), max_cols)
+		win.addnstr(5, 0, (mqtt_host + ":" + str(mqtt_port)).center(max_cols,' '), max_cols)
+		win.addnstr(6, 0, "Waiting for telemetry...".center(max_cols,' '), max_cols)
+		win.noutrefresh()
+		curses.doupdate()
+		last_page = Page_Waiting
+
+	elif page == Page_Menu:
+		win.clear()
+		win.addnstr(1, 0, "Mode Select", max_cols)
+		win.addnstr(2, 0, "   PG +/-, NA1 to select", max_cols)
+		win.addnstr(4, 0, " Sim ", max_cols, curses.color_pair(4 if menu_sel == Menu_Sim else 0))
+		win.addnstr(5, 0, " Key Matrix ", max_cols, curses.color_pair(4 if menu_sel == Menu_Matrix else 0))
+		win.addnstr(6, 0, " Shutdown RPi ", max_cols, curses.color_pair(4 if menu_sel == Menu_Shutdown else 0))
+		win.noutrefresh()
+		curses.doupdate()
+		last_page = Page_Menu
+
+	elif page == Page_Sim and last_page != Page_Sim:
+		win.clear()
+		if last_page != Page_Waiting:
+			redraw_lines(win)
+		win.noutrefresh()
+		curses.doupdate()
+		last_page = Page_Sim
+
+	elif page == Page_Matrix:
+		win.clear()
+		for k in range(72):
+			r = k // 8
+			c = k % 8
+			win.addnstr(r, c, str(key_states[k]), max_cols)
+
+		win.noutrefresh()
+		curses.doupdate()
+		last_page = Page_Matrix
+
+
+def detect_na1_long_press(key_change):
+	global na1_hold_time
+
+	if key_change[0] == "cdu_na1" and key_change[1] == 1:
+		na1_hold_time = time.time()
+	elif key_change[0] == "cdu_na1" and key_change[1] == 0:
+		na1_hold_time = None
+
+	if na1_hold_time != None and time.time() - na1_hold_time >= 5:
+		na1_hold_time = None
+		return True
+
+	return False
+
+
+def handle_input(client):
+	global mode, page, key_changes, menu_sel
+
+	if page == Page_Sim:
+		for key_change in key_changes:
+			if mode == Mode_Connected:
+				# sim mode, send key press through MQTT
+				client.publish("dcs-bios/input/cdu/"+key_change[0], key_change[1])
+
+			if detect_na1_long_press(key_change):
+				set_page(Page_Menu)
+
+	elif page == Page_Menu:
+		for key_change in key_changes:
+			if key_change[0] == "cdu_pg" and key_change[1] == 0 and menu_sel < Menu_Shutdown:
+				menu_sel += 1 # menu up
+			elif key_change[0] == "cdu_pg" and key_change[1] == 2 and menu_sel > Menu_Sim:
+				menu_sel -= 1 # menu down
+			elif key_change[0] == "cdu_na1" and key_change[1] == 1:
+				# menu select
+				if menu_sel == Menu_Sim:
+					set_page(Page_Sim if mode == Mode_Connected else Page_Connecting)
+				elif menu_sel == Menu_Matrix:
+					set_page(Page_Matrix)
+				elif menu_sel == Menu_Shutdown:
+					os.system("sudo shutdown -P now")
+
+	elif page == Page_Matrix:
+		for key_change in key_changes:
+			if detect_na1_long_press(key_change):
+				set_page(Page_Menu)
 
 
 # set up i2c bus for reading key matrix from MCP23017
@@ -168,10 +287,20 @@ def main(stdscr):
 	global key_states
 	global key_changes
 
+	# init curses
 	curses.start_color()
 	curses.use_default_colors()
 	win = curses.newwin(max_rows, max_cols, start_y, start_x)
 
+	stdscr.clear()
+	stdscr.refresh()
+	curses.curs_set(0)
+	curses.init_pair(Brt_Green, 10, curses.COLOR_BLACK)
+	curses.init_pair(Dim_Green, 22, curses.COLOR_BLACK)
+	curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK) # warning message
+	curses.init_pair(4, curses.COLOR_BLACK, curses.COLOR_WHITE) # menu highlight
+
+	# init mqtt client
 	client = mqtt.Client()
 	client.on_connect = on_connect
 	client.on_disconnect = on_disconnect
@@ -180,17 +309,6 @@ def main(stdscr):
 		'win': win,
 		'stdscr': stdscr
 	})
-
-	stdscr.clear()
-	stdscr.refresh()
-	curses.curs_set(0)
-	curses.init_pair(brt_green, 10, curses.COLOR_BLACK)
-	curses.init_pair(dim_green, 22, curses.COLOR_BLACK)
-	curses.init_pair(3, curses.COLOR_RED, curses.COLOR_BLACK)
-
-	win.addnstr(4, 0, "Connecting to MQTT at".center(max_cols,' '), max_cols)
-	win.addnstr(5, 0, (mqtt_host + ":" + str(mqtt_port)).center(max_cols,' '), max_cols)
-	win.refresh()
 
 	client.connect(mqtt_host, mqtt_port, 60)
 
@@ -204,6 +322,9 @@ def main(stdscr):
 	# use CTRL-C to quit
 	running = True
 	while running:
+		draw_page(win)
+
+		# scan key matrix
 		for col in range(8):
 			out_mask = 1 << col
 			# columns are on port A
@@ -234,20 +355,9 @@ def main(stdscr):
 
 				key_states[k] = key_down
 
-		for key_change in key_changes:
-			client.publish("dcs-bios/input/cdu/"+key_change[0], key_change[1])
-
+		# handle key presses for all pages
+		handle_input(client)
 		key_changes.clear()
-
-		# this section prints the key matrix
-		if False:
-			win.clear() #temp
-			for k in range(72):
-				r = k // 8
-				c = k % 8
-				win.addnstr(r, c, str(key_states[k]), max_cols)
-			win.noutrefresh()
-			curses.doupdate()
 
 	client.disconnect()
 	client.loop_stop()
