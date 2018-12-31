@@ -44,7 +44,7 @@ Brt_Green = 1
 Dim_Green = 2
 
 mode = Mode_Disconnected
-page = Page_Menu
+page = Page_Connecting
 last_page = None
 menu_sel = Menu_Sim
 na1_hold_time = None
@@ -87,7 +87,7 @@ def on_connect(client, userdata, flags, rc):
 	global mode, page
 
 	mode = Mode_Connected
-	if page == Page_Sim:
+	if page == Page_Connecting:
 		set_page(Page_Waiting)
 
 	# Subscribing in on_connect() means that if we lose the connection and
@@ -244,9 +244,6 @@ def handle_input(client):
 				# sim mode, send key press through MQTT
 				client.publish("dcs-bios/input/cdu/"+key_change[0], key_change[1])
 
-		if detect_na1_long_press(key_changes):
-			set_page(Page_Menu)
-
 	elif page == Page_Menu:
 		for key_change in key_changes:
 			if key_change[0] == "cdu_pg" and key_change[1] == 0 and menu_sel < Menu_Shutdown:
@@ -262,9 +259,8 @@ def handle_input(client):
 				elif menu_sel == Menu_Shutdown:
 					os.system("sudo shutdown -P now")
 
-	elif page == Page_Matrix:
-		if detect_na1_long_press(key_changes):
-			set_page(Page_Menu)
+	if page != Page_Menu and detect_na1_long_press(key_changes):
+		set_page(Page_Menu)
 
 
 # set up i2c bus for reading key matrix from MCP23017
