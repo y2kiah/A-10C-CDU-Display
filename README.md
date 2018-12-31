@@ -53,12 +53,12 @@ CDU buttons and back lighting are also implemented in the same `cdu.py` script a
 		`sudo su -c 'echo "DAEMON_OPTS=\"--gpio=22\"" > /etc/default/pi-blaster-mqtt'`
 
 9) allow pi to shut down without password (enables the shutdown menu option)
-	open the sudoers file with `sudo vim /etc/sudoers`, add the following to the end
-	```Shell
-	# allow pi user to shut down with no password
-	nobody ALL = NOPASSWD: /sbin/shutdown*
-	```
-	use `:x!` to save
+	- open the sudoers file with `sudo vim /etc/sudoers`, add the following to the end
+		```Shell
+		# allow pi user to shut down with no password
+		nobody ALL = NOPASSWD: /sbin/shutdown*
+		```
+	- use `:x!` to save
 
 10) install MQTT and mosquitto (use an online tutorial)
 	- can be run on same or a separate Pi

@@ -131,41 +131,42 @@ def on_message(client, userdata, msg):
 		try:
 			line = payload.decode("utf-8")
 			lines[row] = line
-			win.addnstr(row, 0, line, max_cols, curses.color_pair(active_color))
+			if page == Page_Sim:
+				win.addnstr(row, 0, line, max_cols, curses.color_pair(active_color))
+				win.noutrefresh()
+				curses.doupdate()
 		except:
 			pass
 
 	elif msg.topic.find("cdu_brt") != -1:
-                if int(msg.payload) == 0:
-                        active_color = Dim_Green
-                        redraw_lines(win)
-                elif int(msg.payload) == 2:
-                        active_color = Brt_Green
-                        redraw_lines(win)
+		if int(msg.payload) == 0:
+			active_color = Dim_Green
+			redraw_lines(win)
+		elif int(msg.payload) == 2:
+			active_color = Brt_Green
+			redraw_lines(win)
+		win.noutrefresh()
+		curses.doupdate()
 
 	elif msg.topic.find("lcp_aux_inst") != -1:
-		aux_light = int(msg.payload) / 65535
+		aux_light = int(msg.payload) / 1023
 		client.publish("pi-blaster-mqtt/text", "{0}={1:.2f}".format(pwm_gpio_bcm, aux_light))
-
-	win.noutrefresh()
-	curses.doupdate()
 
 
 def redraw_lines(win):
-	for row in range(max_rows):
-		try:
-			win.addnstr(row, 0, lines[row], max_cols, curses.color_pair(active_color))
-		except:
-			pass
+	global page
+	if page == Page_Sim:
+		for row in range(max_rows):
+			try:
+				win.addnstr(row, 0, lines[row], max_cols, curses.color_pair(active_color))
+			except:
+				pass
 
 
 def set_page(new_page):
 	global page, last_page
 	last_page = page
 	page = new_page
-
-	if new_page == Page_Menu:
-		menu_sel = Menu_Sim
 
 
 def draw_page(win):
@@ -176,7 +177,7 @@ def draw_page(win):
 		win.addnstr(5, 0, (mqtt_host + ":" + str(mqtt_port)).center(max_cols,' '), max_cols)
 		win.noutrefresh()
 		curses.doupdate()
-		last_page =  Page_Connecting
+		last_page = Page_Connecting
 
 	elif page == Page_Waiting and last_page != Page_Waiting:
 		win.clear()
@@ -218,13 +219,14 @@ def draw_page(win):
 		last_page = Page_Matrix
 
 
-def detect_na1_long_press(key_change):
+def detect_na1_long_press(key_changes):
 	global na1_hold_time
 
-	if key_change[0] == "cdu_na1" and key_change[1] == 1:
-		na1_hold_time = time.time()
-	elif key_change[0] == "cdu_na1" and key_change[1] == 0:
-		na1_hold_time = None
+	for key_change in key_changes:
+		if key_change[0] == "cdu_na1" and key_change[1] == 1:
+			na1_hold_time = time.time()
+		elif key_change[0] == "cdu_na1" and key_change[1] == 0:
+			na1_hold_time = None
 
 	if na1_hold_time != None and time.time() - na1_hold_time >= 5:
 		na1_hold_time = None
@@ -242,8 +244,8 @@ def handle_input(client):
 				# sim mode, send key press through MQTT
 				client.publish("dcs-bios/input/cdu/"+key_change[0], key_change[1])
 
-			if detect_na1_long_press(key_change):
-				set_page(Page_Menu)
+		if detect_na1_long_press(key_changes):
+			set_page(Page_Menu)
 
 	elif page == Page_Menu:
 		for key_change in key_changes:
@@ -261,9 +263,8 @@ def handle_input(client):
 					os.system("sudo shutdown -P now")
 
 	elif page == Page_Matrix:
-		for key_change in key_changes:
-			if detect_na1_long_press(key_change):
-				set_page(Page_Menu)
+		if detect_na1_long_press(key_changes):
+			set_page(Page_Menu)
 
 
 # set up i2c bus for reading key matrix from MCP23017
