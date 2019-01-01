@@ -23,9 +23,10 @@ max_cols = 24
 start_y = 0
 start_x = 4
 
-# mode settings
-Mode_Disconnected = 0
-Mode_Connected = 1
+# status settings
+Status_Disconnected = 0
+Status_Inactive = 1
+Status_Active = 2
 
 # page settings
 Page_Connecting = 0
@@ -43,7 +44,7 @@ Menu_Shutdown = 2
 Brt_Green = 1
 Dim_Green = 2
 
-mode = Mode_Disconnected
+status = Status_Disconnected
 page = Page_Connecting
 last_page = None
 menu_sel = Menu_Sim
@@ -84,9 +85,9 @@ def eprint(*args, **kwargs):
 
 # The callback for when the client receives a CONNACK response from the server.
 def on_connect(client, userdata, flags, rc):
-	global mode, page
+	global status, page
 
-	mode = Mode_Connected
+	status = Status_Inactive
 	if page == Page_Connecting:
 		set_page(Page_Waiting)
 
@@ -97,25 +98,28 @@ def on_connect(client, userdata, flags, rc):
 	# example: dcs-bios/output/cdu_display/cdu_line0
 	client.subscribe([("dcs-bios/output/cdu_display/+", 1),
 	                  ("dcs-bios/output/cdu/cdu_brt", 1),
-	                  ("dcs-bios/output/light_system_control_panel/lcp_aux_inst", 0)])
+	                  ("dcs-bios/output/light_system_control_panel/lcp_aux_inst", 0),
+                          ("dcs-bios/output/metadata/_acft_name", 1),
+                          ("dcs-bios/goodbye", 1)])
 
 
 def on_disconnect(client, userdata, rc):
-	global mode, page
-	mode = Mode_Disconnected
-	if page == Page_Sim:
+	global status, page
+	status = Status_Disconnected
+	if page == Page_Sim or page == Page_Waiting:
 		set_page(Page_Connecting)
 
 
 # The callback for when a PUBLISH message is received from the server.
 def on_message(client, userdata, msg):
-	global page, lines, active_color
+	global status, page, lines, active_color
 	win = userdata['win']
 
-	if page == Page_Waiting:
-		set_page(Page_Sim)
-
 	if msg.topic.find("cdu_line") != -1:
+		if status == Status_Inactive:
+			status = Status_Active
+			set_page(Page_Sim)
+
 		row = int(msg.topic[-1])
 
 		payload = (msg.payload
@@ -152,6 +156,14 @@ def on_message(client, userdata, msg):
 		aux_light = int(msg.payload) / 1023
 		client.publish("pi-blaster-mqtt/text", "{0}={1:.2f}".format(pwm_gpio_bcm, aux_light))
 
+	elif msg.topic.find("_acft_name") != -1 and status == Status_Inactive:
+		status = Status_Active
+		set_page(Page_Sim)
+
+	elif msg.topic.find("goodbye") != -1 and status == Status_Active:
+		status = Status_Inactive
+		set_page(Page_Waiting)
+
 
 def redraw_lines(win):
 	global page
@@ -173,6 +185,7 @@ def draw_page(win):
 	global page, last_page
 
 	if page == Page_Connecting and last_page != Page_Connecting:
+		win.clear()
 		win.addnstr(4, 0, "Connecting to MQTT at".center(max_cols,' '), max_cols)
 		win.addnstr(5, 0, (mqtt_host + ":" + str(mqtt_port)).center(max_cols,' '), max_cols)
 		win.noutrefresh()
@@ -236,11 +249,11 @@ def detect_na1_long_press(key_changes):
 
 
 def handle_input(client):
-	global mode, page, key_changes, menu_sel
+	global status, page, key_changes, menu_sel
 
 	if page == Page_Sim:
 		for key_change in key_changes:
-			if mode == Mode_Connected:
+			if status == Status_Active:
 				# sim mode, send key press through MQTT
 				client.publish("dcs-bios/input/cdu/"+key_change[0], key_change[1])
 
@@ -253,7 +266,7 @@ def handle_input(client):
 			elif key_change[0] == "cdu_na1" and key_change[1] == 1:
 				# menu select
 				if menu_sel == Menu_Sim:
-					set_page(Page_Sim if mode == Mode_Connected else Page_Connecting)
+					set_page(Page_Sim if status == Status_Active else (Page_Waiting if status == Status_Inactive else Page_Connecting))
 				elif menu_sel == Menu_Matrix:
 					set_page(Page_Matrix)
 				elif menu_sel == Menu_Shutdown:
@@ -281,8 +294,7 @@ def init_GPIO():
 
 
 def main(stdscr):
-	global key_states
-	global key_changes
+	global key_states, key_changes
 
 	# init curses
 	curses.start_color()
