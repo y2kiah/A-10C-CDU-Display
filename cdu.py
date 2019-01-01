@@ -95,9 +95,9 @@ def on_connect(client, userdata, flags, rc):
 
 	# subscribe to cdu_display messages with single-level wildcard
 	# example: dcs-bios/output/cdu_display/cdu_line0
-	client.subscribe("dcs-bios/output/cdu_display/+")
-	client.subscribe("dcs-bios/output/cdu/cdu_brt")
-	client.subscribe("dcs-bios/output/light_system_control_panel/lcp_aux_inst")
+	client.subscribe([("dcs-bios/output/cdu_display/+", 1),
+	                  ("dcs-bios/output/cdu/cdu_brt", 1),
+	                  ("dcs-bios/output/light_system_control_panel/lcp_aux_inst", 0)])
 
 
 def on_disconnect(client, userdata, rc):
@@ -128,15 +128,15 @@ def on_message(client, userdata, msg):
 			.replace(b"\xAE", bytes("\u2195","utf-8"))  # up/down arrow
 			.replace(b"\xB0", bytes("\u00B0","utf-8"))) # degree
 
-		try:
-			line = payload.decode("utf-8")
-			lines[row] = line
-			if page == Page_Sim:
+		line = payload.decode("utf-8")
+		lines[row] = line
+		if page == Page_Sim:
+			try:
 				win.addnstr(row, 0, line, max_cols, curses.color_pair(active_color))
-				win.noutrefresh()
-				curses.doupdate()
-		except:
-			pass
+			except:
+				pass
+			win.noutrefresh()
+			curses.doupdate()
 
 	elif msg.topic.find("cdu_brt") != -1:
 		if int(msg.payload) == 0:
