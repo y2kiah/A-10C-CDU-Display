@@ -8,6 +8,11 @@ The Linux terminal emulator `screen` is used to run `cdu.py` on boot, so it is p
 
 CDU buttons and back lighting are also implemented in the same `cdu.py` script as the display. The key pad is assumed to be a matrix, and can be easily reconfigured to match the actual physical matrix of your PCB.
 
+## Demo video and article
+[![https://www.youtube.com/watch?v=NWngFeaJuhw](https://i9.ytimg.com/vi/NWngFeaJuhw/mq2.jpg?sqp=CLyv844G&rs=AOn4CLCbujezOuhNZ18JJoczFCax4EVSpw)](https://www.youtube.com/watch?v=NWngFeaJuhw)
+
+[ED Forums blog post](https://forums.eagle.ru/topic/42822-y2kiahs-a-10c-cockpit-build/?do=findComment&comment=3716185)
+
 ## Setup Instructions
 
 1) get a "Raspberry Pi 4.0 inch HDMI LCD GPIO Touch"
